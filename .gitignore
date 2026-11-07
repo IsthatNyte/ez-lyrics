@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+
+# Build outputs
+build/
+dist/
+*.exe
+
+# Cache and local state
+.ez_lyrics*
+*.log
