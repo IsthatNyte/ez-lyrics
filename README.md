@@ -14,7 +14,7 @@ EZ Lyrics is a sleek, ultra-low resource floating companion overlay for Spotify.
 
 ### Video Previews
 - [Full Playback & Lyrics Demo](https://files.catbox.moe/otukqh.mp4)
-- [Overlay & Controls Demo](https://files.catbox.moe/28o6mf.mp4)
+- [Search, Playlists & Controls Demo](https://files.catbox.moe/28o6mf.mp4)
 
 ---
 
