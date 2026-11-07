@@ -1,6 +1,8 @@
-# EZ Lyrics
-
-> A lightweight, fast lyrics overlay based on Python.
+<div align="center">
+  <img src="assets/logo.png" alt="EZ Lyrics Logo" width="160" />
+  <h1>EZ Lyrics</h1>
+  <p><strong>A lightweight, fast lyrics overlay based on Python.</strong></p>
+</div>
 
 EZ Lyrics is a sleek, ultra-low resource floating companion overlay for Spotify. It tracks Spotify's live playback and displays millisecond-accurate synchronized lyrics with audio reactive visuals.
 
