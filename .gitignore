@@ -9,6 +9,6 @@ build/
 dist/
 *.exe
 
-# Cache and local state
+# Cache, logs, and private user data
 .ez_lyrics*
 *.log
