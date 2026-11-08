@@ -181,7 +181,9 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.04);
     transform-style: preserve-3d;
-    transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-radius 0.35s ease;
+    transform-origin: center center;
+    backface-visibility: hidden;
+    transition: box-shadow 0.25s ease, border-radius 0.35s ease;
     will-change: transform;
   }
   .cover-glare {
@@ -3406,6 +3408,7 @@
       }
     }
 
+    updateBassCoverPulse();
     requestAnimationFrame(animFrame);
   }
   requestAnimationFrame(animFrame);
@@ -3839,35 +3842,75 @@
   }
 
   // Interactive 3D Hover Depth Effect on All Album Cover Variations
+  const coverPulseState = {
+    bassScale: 1.0,
+    targets: []
+  };
+
+  function updateBassCoverPulse() {
+    let bassAmp = 0;
+    if (state.is_playing && smoothedFft && smoothedFft.length >= 2) {
+      const subBass = smoothedFft[0] || 0;
+      const kickBass = smoothedFft[1] || 0;
+      bassAmp = Math.max(subBass, kickBass * 0.96);
+    }
+    const bassOver = Math.max(0, bassAmp - 0.08);
+    const targetScale = 1.0 + Math.min(0.085, bassOver * 0.12);
+
+    if (targetScale > coverPulseState.bassScale) {
+      coverPulseState.bassScale += (targetScale - coverPulseState.bassScale) * 0.45;
+    } else {
+      coverPulseState.bassScale += (targetScale - coverPulseState.bassScale) * 0.12;
+    }
+
+    const tList = coverPulseState.targets;
+    for (let i = 0; i < tList.length; i++) {
+      const it = tList[i];
+      if (!it.stage) continue;
+      it.curRotX += (it.targetRotX - it.curRotX) * 0.22;
+      it.curRotY += (it.targetRotY - it.curRotY) * 0.22;
+      const targetHoverScale = it.isHovered ? 1.045 : 1.0;
+      it.curHoverScale += (targetHoverScale - it.curHoverScale) * 0.18;
+      const finalScale = coverPulseState.bassScale * it.curHoverScale;
+      it.stage.style.transform = `rotateX(${it.curRotX.toFixed(2)}deg) rotateY(${it.curRotY.toFixed(2)}deg) scale3d(${finalScale.toFixed(4)}, ${finalScale.toFixed(4)}, 1)`;
+    }
+  }
+
   function init3dCoverHover() {
     const pairs = [
       { wrap: document.getElementById('partCover'), stage: document.getElementById('coverStageMain'), glare: document.getElementById('coverGlareMain') },
       { wrap: document.getElementById('partMiniCover'), stage: document.getElementById('coverStageMini'), glare: document.getElementById('coverGlareMini') }
     ];
-    pairs.forEach(({ wrap, stage, glare }) => {
-      if (!wrap || !stage) return;
-      wrap.addEventListener('mousemove', (e) => {
+    coverPulseState.targets = pairs.map(({ wrap, stage, glare }) => ({
+      wrap, stage, glare,
+      targetRotX: 0, targetRotY: 0, curRotX: 0, curRotY: 0,
+      isHovered: false, curHoverScale: 1.0
+    }));
+
+    coverPulseState.targets.forEach((item) => {
+      if (!item.wrap || !item.stage) return;
+      item.wrap.addEventListener('mousemove', (e) => {
         if (!is3dHoverEnabled || isDraggingWindow) return;
-        const rect = wrap.getBoundingClientRect();
+        const rect = item.wrap.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
         const nx = ((e.clientX - rect.left) / rect.width) - 0.5;
         const ny = ((e.clientY - rect.top) / rect.height) - 0.5;
-        const rotY = (nx * 24).toFixed(2);
-        const rotX = (-ny * 24).toFixed(2);
-        stage.style.transition = 'transform 0.06s ease-out';
-        stage.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg) scale3d(1.045, 1.045, 1.045)`;
-        if (glare) {
+        item.targetRotY = nx * 24;
+        item.targetRotX = -ny * 24;
+        item.isHovered = true;
+        if (item.glare) {
           const gx = ((nx + 0.5) * 100).toFixed(1);
           const gy = ((ny + 0.5) * 100).toFixed(1);
-          glare.style.opacity = '1';
-          glare.style.background = `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.0) 64%)`;
+          item.glare.style.opacity = '1';
+          item.glare.style.background = `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.0) 64%)`;
         }
       });
-      wrap.addEventListener('mouseleave', () => {
-        stage.style.transition = 'transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1)';
-        stage.style.transform = 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
-        if (glare) {
-          glare.style.opacity = '0';
+      item.wrap.addEventListener('mouseleave', () => {
+        item.targetRotX = 0;
+        item.targetRotY = 0;
+        item.isHovered = false;
+        if (item.glare) {
+          item.glare.style.opacity = '0';
         }
       });
     });
@@ -5451,7 +5494,16 @@
     resizeCanvases();
   }, 60);
 
-  setInterval(pollBridge, 180);
+  let pollTimer = null;
+  function scheduleAdaptivePoll() {
+    clearTimeout(pollTimer);
+    const delay = state.is_playing ? 110 : (document.hidden ? 450 : 250);
+    pollTimer = setTimeout(() => {
+      pollBridge();
+      scheduleAdaptivePoll();
+    }, delay);
+  }
+  scheduleAdaptivePoll();
 
   // Cosmic LiquidGL Fluid Simulation inside EZDJ Orb
   (function initOrbFluidSimulation() {

@@ -38,6 +38,10 @@ import xml.etree.ElementTree as ET
 import ctypes
 from ctypes import cast, POINTER, wintypes
 import requests
+http_session = requests.Session()
+_http_adapter = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=32, max_retries=1)
+http_session.mount("https://", _http_adapter)
+http_session.mount("http://", _http_adapter)
 from PIL import Image
 import webview
 
@@ -589,7 +593,7 @@ def resolve_exact_spotify_track(artist, title):
         headers = {"User-Agent": "Mozilla/5.0"}
         for tid in recent_tids:
             try:
-                r = requests.get(f"https://open.spotify.com/embed/track/{tid}", headers=headers, timeout=3.0)
+                r = http_session.get(f"https://open.spotify.com/embed/track/{tid}", headers=headers, timeout=3.0)
                 if r.status_code == 200:
                     m = re.search(r'__NEXT_DATA__[^>]*>([^<]+)<', r.text)
                     if m:
@@ -628,7 +632,7 @@ def fetch_cover_and_artist(artist, title, album=""):
                 continue
             try:
                 q = urllib.parse.quote(q_text)
-                r = requests.get(f"https://api.deezer.com/search?q={q}", headers=headers, timeout=3.5)
+                r = http_session.get(f"https://api.deezer.com/search?q={q}", headers=headers, timeout=3.5)
                 if r.status_code == 200:
                     items = r.json().get("data", [])
                     for item in items[:8]:
@@ -640,7 +644,7 @@ def fetch_cover_and_artist(artist, title, album=""):
                         contribs_names = [item_artist_name] if item_artist_name else []
                         if track_id:
                             try:
-                                r2 = requests.get(f"https://api.deezer.com/track/{track_id}", headers=headers, timeout=2.8)
+                                r2 = http_session.get(f"https://api.deezer.com/track/{track_id}", headers=headers, timeout=2.8)
                                 if r2.status_code == 200:
                                     contribs = r2.json().get("contributors", [])
                                     c_names = [c.get("name").strip() for c in contribs if c.get("name")]
@@ -666,7 +670,7 @@ def fetch_cover_and_artist(artist, title, album=""):
     if not best_cover_url:
         try:
             q = urllib.parse.quote(f"{clean_artist} {clean_title}".strip())
-            r = requests.get(f"https://itunes.apple.com/search?term={q}&entity=song&limit=8", headers=headers, timeout=3.5)
+            r = http_session.get(f"https://itunes.apple.com/search?term={q}&entity=song&limit=8", headers=headers, timeout=3.5)
             if r.status_code == 200:
                 for item in r.json().get("results", []):
                     it_title = item.get("trackName", "")
@@ -685,7 +689,7 @@ def fetch_cover_and_artist(artist, title, album=""):
     dominant_color = "#ffffff"
     if best_cover_url:
         try:
-            img_resp = requests.get(best_cover_url, headers=headers, timeout=3.5)
+            img_resp = http_session.get(best_cover_url, headers=headers, timeout=3.5)
             if img_resp.status_code == 200 and len(img_resp.content) > 1000:
                 cover_b64 = "data:image/jpeg;base64," + base64.b64encode(img_resp.content).decode("ascii")
                 dominant_color = extract_dominant_color(img_resp.content)
@@ -920,13 +924,13 @@ def fetch_spicy_api_v1(artist, title, dur_sec):
         params = {"title": title, "artist": artist, "limit": 5}
         if dur_sec and dur_sec > 10:
             params["duration"] = round(float(dur_sec), 2)
-        r = requests.get("https://api.spicylyrics.org/v1/tracks/search", params=params, headers=headers, timeout=4.0)
+        r = http_session.get("https://api.spicylyrics.org/v1/tracks/search", params=params, headers=headers, timeout=4.0)
         if r.status_code == 200:
             results = r.json().get("Body", {}).get("results", [])
             if results:
                 track_id = results[0].get("id")
                 if track_id:
-                    r2 = requests.get(f"https://api.spicylyrics.org/v1/lyrics/{track_id}", headers=headers, timeout=4.5)
+                    r2 = http_session.get(f"https://api.spicylyrics.org/v1/lyrics/{track_id}", headers=headers, timeout=4.5)
                     if r2.status_code == 200:
                         body = r2.json().get("Body", {})
                         parsed = convert_spicy_body_to_lines(body)
@@ -954,7 +958,7 @@ def fetch_boidu_ttml(artist, title, dur_sec=0, album=""):
         for p in candidates:
             params = {k: v for k, v in p.items() if v}
             try:
-                r = requests.get(url, params=params, timeout=3.8)
+                r = http_session.get(url, params=params, timeout=3.8)
                 if r.status_code == 200:
                     ttml = r.json().get("ttml", "")
                     if ttml and "<p" in ttml:
@@ -972,7 +976,7 @@ def fetch_kugou_krc(artist, title, dur_sec):
         clean_t = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title).replace('#', '').strip()
         clean_a = artist.split(',')[0].replace('#', '').strip()
         kw = f"{clean_t} {clean_a}".strip()
-        r = requests.get(
+        r = http_session.get(
             "http://mobilecdn.kugou.com/api/v3/search/song",
             params={"format": "json", "keyword": kw, "page": 1, "pagesize": 4},
             timeout=3.5
@@ -992,7 +996,7 @@ def fetch_kugou_krc(artist, title, dur_sec):
         if not target_hash:
             return []
 
-        r2 = requests.get(
+        r2 = http_session.get(
             "http://krcs.kugou.com/search",
             params={"ver": 1, "man": "yes", "client": "mobi", "keyword": "", "duration": "", "hash": target_hash, "album_audio_id": ""},
             timeout=3.5
@@ -1002,7 +1006,7 @@ def fetch_kugou_krc(artist, title, dur_sec):
             return []
         cid = cands[0].get("id")
         ckey = cands[0].get("accesskey")
-        r3 = requests.get(
+        r3 = http_session.get(
             "http://lyrics.kugou.com/download",
             params={"ver": 1, "client": "pc", "id": cid, "accesskey": ckey, "fmt": "krc", "charset": "utf8"},
             timeout=3.8
@@ -1077,7 +1081,7 @@ def fetch_netease_lyrics(artist, title, dur_sec=0):
         clean_t = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title).replace('#', '').strip()
         clean_a = artist.split(',')[0].replace('#', '').strip()
         kw = f"{clean_t} {clean_a}".strip()
-        r = requests.post(
+        r = http_session.post(
             "https://music.163.com/api/search/get",
             data={"s": kw, "type": 1, "limit": 6},
             headers={"Referer": "https://music.163.com", "User-Agent": "Mozilla/5.0"},
@@ -1094,7 +1098,7 @@ def fetch_netease_lyrics(artist, title, dur_sec=0):
                     continue
                 if dur_sec and dur_sec > 15 and sdur > 15 and abs(sdur - dur_sec) > 14:
                     continue
-                r2 = requests.get(
+                r2 = http_session.get(
                     f"https://interface3.music.163.com/api/song/lyric/v1?id={sid}&cp=false&tv=0&lv=1&rv=0&kv=1&yv=1&ytv=0&yrv=0",
                     timeout=3.5
                 )
@@ -1170,7 +1174,7 @@ def translate_and_romanize_lyrics(lines, target_lang="en"):
         joined = "\n".join(raw_texts)
         if not joined.strip():
             return lines
-        r = requests.get(
+        r = http_session.get(
             "https://translate.googleapis.com/translate_a/single",
             params=[
                 ("client", "dict-chrome-ex"),
@@ -1207,7 +1211,7 @@ def translate_and_romanize_lyrics(lines, target_lang="en"):
             alt_lines = []
             if detected_lang.startswith("en") and target_lang == "en":
                 try:
-                    r_es = requests.get(
+                    r_es = http_session.get(
                         "https://translate.googleapis.com/translate_a/single",
                         params=[("client", "dict-chrome-ex"), ("sl", "en"), ("tl", "es"), ("dt", "t"), ("q", joined)],
                         headers={"User-Agent": "Mozilla/5.0"},
@@ -1314,7 +1318,7 @@ def fetch_synced_lyrics(artist, title, dur_sec=0, album=""):
             if dur_sec and dur_sec > 10:
                 params["duration"] = int(dur_sec)
             headers = {"User-Agent": "EZLyrics/3.0"}
-            r = requests.get(url, params=params, headers=headers, timeout=3.8)
+            r = http_session.get(url, params=params, headers=headers, timeout=3.8)
             if r.status_code == 200:
                 synced = r.json().get("syncedLyrics")
                 if synced:
@@ -1327,7 +1331,7 @@ def fetch_synced_lyrics(artist, title, dur_sec=0, album=""):
             url = "https://lrclib.net/api/search"
             clean_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title).replace("#", "").strip()
             clean_artist = artist.split(",")[0].replace("#", "").strip()
-            r = requests.get(url, params={"q": f"{clean_title} {clean_artist}".strip()}, headers={"User-Agent": "EZLyrics/3.0"}, timeout=3.8)
+            r = http_session.get(url, params={"q": f"{clean_title} {clean_artist}".strip()}, headers={"User-Agent": "EZLyrics/3.0"}, timeout=3.8)
             if r.status_code == 200:
                 items = r.json()
                 if isinstance(items, list) and len(items) > 0:
@@ -1455,7 +1459,7 @@ def discover_user_playlists():
                 pname = cached_names.get(pid, "")
                 if not pname:
                     try:
-                        r = requests.get(f"https://open.spotify.com/oembed?url=https://open.spotify.com/playlist/{pid}", timeout=2.5)
+                        r = http_session.get(f"https://open.spotify.com/oembed?url=https://open.spotify.com/playlist/{pid}", timeout=2.5)
                         if r.status_code == 200:
                             pname = r.json().get("title", "").strip()
                             if pname:
@@ -1735,7 +1739,7 @@ def execute_ai_dj_session(style_prompt="Surprise Me"):
     ]:
         try:
             terminal_logs.append(f"[{ts}] > AI_QUERY: POST {endpoint} (model={model_id})")
-            r = requests.post(
+            r = http_session.post(
                 endpoint,
                 json={
                     "model": model_id,
@@ -2026,10 +2030,13 @@ def audio_meter_thread():
 
             while True:
                 try:
-                    val = float(_audio_meter.GetPeakValue())
                     with state_lock:
                         norm_on = app_state.get("audio_norm", True)
                         playing = app_state.get("is_playing", False)
+                    if not playing:
+                        time.sleep(0.35)
+                        continue
+                    val = float(_audio_meter.GetPeakValue())
 
                     if norm_on and playing and val > 0.005:
                         rate = 0.07 if val > rolling_rms else 0.015
@@ -2078,7 +2085,7 @@ def audio_meter_thread():
                         app_state["fft_bands"] = list(smooth_bands)
                 except Exception:
                     pass
-                time.sleep(0.032)
+                time.sleep(0.028)
     except Exception:
         pass
 
